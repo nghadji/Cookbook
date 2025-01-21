@@ -19,13 +19,28 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     var osc = [TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(),
                 TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells()]
     
+    // Filter setup
+    var filter: MoogLadder!
+    
+    @Published var cutoffFrequency: AUValue = 1_000 {
+        didSet {
+            filter.cutoffFrequency = cutoffFrequency
+        }
+    }
+    
+    @Published var resonance: AUValue = 0.3 {
+        didSet {
+            filter.resonance = resonance
+        }
+    }
+    
     @Published var useTubularBells: Bool = true {
         didSet {
             // Stop all currently playing notes when switching instruments
             for i in 0..<notes.count {
                 if notes[i] != 0 {
                     if useTubularBells {
-                        env2[i].closeGate() // Close previous instrument's gates
+                        env2[i].closeGate()
                     } else {
                         env[i].closeGate()
                     }
@@ -109,19 +124,27 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     init() {
         env = [AmplitudeEnvelope(osc[0]),AmplitudeEnvelope(osc[1]),AmplitudeEnvelope(osc[2]),AmplitudeEnvelope(osc[3]),AmplitudeEnvelope(osc[4]),AmplitudeEnvelope(osc[5]),AmplitudeEnvelope(osc[6]),AmplitudeEnvelope(osc[7]),AmplitudeEnvelope(osc[8]),AmplitudeEnvelope(osc[9]),AmplitudeEnvelope(osc[10])]
         env2 = [AmplitudeEnvelope(osc2[0]),AmplitudeEnvelope(osc2[1]),AmplitudeEnvelope(osc2[2]),AmplitudeEnvelope(osc2[3]),AmplitudeEnvelope(osc2[4]),AmplitudeEnvelope(osc2[5]),AmplitudeEnvelope(osc2[6]),AmplitudeEnvelope(osc2[7]),AmplitudeEnvelope(osc2[8]),AmplitudeEnvelope(osc2[9]),AmplitudeEnvelope(osc2[10])]
+        
+        // Configure envelopes for both instruments
         for envelope in env {
             envelope.attackDuration = 0
             envelope.releaseDuration = 0.2
             mixer.addInput(envelope)
         }
+        
         for envelope in env2 {
             envelope.attackDuration = 0
             envelope.releaseDuration = 0.2
             mixer.addInput(envelope)
         }
-
-        engine.output = mixer
-
+        
+        // Set up filter after mixer is configured
+        filter = MoogLadder(mixer)
+        filter.cutoffFrequency = cutoffFrequency
+        filter.resonance = resonance
+        
+        engine.output = filter
+        
         // Set up MIDI
         MIDIConnect()
     } 
@@ -187,11 +210,30 @@ extension NSNotification.Name {
 struct BellHarmonyView: View {
     @StateObject var conductor = BellHarmonyConductor()
     @Environment(\.colorScheme) var colorScheme
+    @State private var showFFT = false
 
     var body: some View {
         VStack {
-            if conductor.engine.output != nil {
-                NodeOutputView(conductor.engine.output!)
+            // Audio Visualization Section
+            VStack {
+                if conductor.engine.output != nil {
+                    if showFFT {
+                        FFTView(conductor.engine.output!)
+                            .frame(height: 100)
+                    } else {
+                        NodeOutputView(conductor.engine.output!)
+                            .frame(height: 100)
+                    }
+                    
+                    // Toggle between waveform and FFT
+                    Button(action: {
+                        showFFT.toggle()
+                    }) {
+                        Text(showFFT ? "Show Waveform" : "Show Spectrum")
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.bottom, 10)
+                }
             }
             
             HStack {
@@ -213,6 +255,26 @@ struct BellHarmonyView: View {
                         .padding()
                         .background(RoundedRectangle(cornerRadius: 8)
                             .stroke(!conductor.useTubularBells ? Color.green : Color.blue))
+                }
+            }
+            .padding()
+            
+            // Filter Controls with visualization feedback
+            VStack(spacing: 20) {
+                HStack {
+                    Text("Cutoff")
+                    Slider(value: $conductor.cutoffFrequency, in: 20...20_000) {
+                        Text("Cutoff Frequency")
+                    }
+                    Text(String(format: "%.0f Hz", conductor.cutoffFrequency))
+                }
+                
+                HStack {
+                    Text("Resonance")
+                    Slider(value: $conductor.resonance, in: 0...0.75) {
+                        Text("Resonance")
+                    }
+                    Text(String(format: "%.2f", conductor.resonance))
                 }
             }
             .padding()

@@ -10,12 +10,15 @@ import Tonic
 import MIDIKit
 import DunneAudioKit
 
-class PolyphonicSTKConductor: ObservableObject, HasAudioEngine {
+class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     let engine = AudioEngine()
     let mixer = Mixer()
     var notes = Array(repeating: 0, count: 11)
-    var osc = [RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(),
+    var osc2 = [RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(),
                RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey()]
+    var osc = [TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(),
+                TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells()]
+    
     
     // MIDI Manager (MIDI methods are in SoundFont+MIDI)
     let midiManager = MIDIManager(
@@ -48,6 +51,22 @@ class PolyphonicSTKConductor: ObservableObject, HasAudioEngine {
                     env[num].closeGate()
                     notes[num] = 0
             }
+        }
+    }
+    
+    func playBellChord1() {
+        // Clear any currently playing notes
+        for i in 0..<env.count {
+            env[i].closeGate()
+            notes[i] = 0
+        }
+        
+        // Play the chord notes
+        let chordNotes = [63, 72, 79, 85, 90, 95] // D#3, C4, G4, C#5, F#5, B5
+        for (index, note) in chordNotes.enumerated() {
+            osc[index].trigger(note: MIDINoteNumber(note), velocity: 100)
+            notes[index] = note
+            env[index].openGate()
         }
     }
     
@@ -120,21 +139,34 @@ class PolyphonicSTKConductor: ObservableObject, HasAudioEngine {
     }
 }
 
-/* extension NSNotification.Name {
+extension NSNotification.Name {
     static let MIDIKey = Notification.Name("MIDIKey")
-} */
+}
 
-struct PolyphonicSTKView: View {
-    @StateObject var conductor = PolyphonicSTKConductor()
+struct BellHarmonyView: View {
+    @StateObject var conductor = BellHarmonyConductor()
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        if conductor.engine.output != nil {
-            NodeOutputView(conductor.engine.output!)
+        VStack {
+            if conductor.engine.output != nil {
+                NodeOutputView(conductor.engine.output!)
+            }
+            
+            Button(action: {
+                conductor.playBellChord1()
+            }) {
+                Text("Bell Chord 1")
+                    .foregroundColor(.blue)
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
+            }
+            .padding()
+            
+            MIDIKitKeyboard(noteOn: conductor.noteOn,
+                           noteOff: conductor.noteOff)
         }
-        MIDIKitKeyboard(noteOn: conductor.noteOn,
-                         noteOff: conductor.noteOff)
-        .cookbookNavBarTitle("Polyphonic STK + MIDIKit")
+        .cookbookNavBarTitle("Bell Harmony")
         .onAppear {
             conductor.start()
         }
@@ -142,6 +174,6 @@ struct PolyphonicSTKView: View {
             conductor.stop()
         }
         .background(colorScheme == .dark ?
-                    Color.clear : Color(red: 0.9, green: 0.9, blue: 0.9))
+                   Color.clear : Color(red: 0.9, green: 0.9, blue: 0.9))
     }
 }

@@ -14,6 +14,8 @@ struct MasterView: View {
     var body: some View {
         Form {
             Section(header: Text("Categories")) {
+                
+                
                 Group {
                     DisclosureGroup("Mini Apps") {
                         Group {
@@ -36,6 +38,9 @@ struct MasterView: View {
                             NavigationLink("Telephone", destination: Telephone())
                             NavigationLink("Tuner", destination: TunerView())
                             NavigationLink("Vocal Tract", destination: VocalTractView())
+                        }
+                        Group {
+                            NavigationLink("Bell Harmony", destination: BellHarmonyView())
                         }
                     }
                 }

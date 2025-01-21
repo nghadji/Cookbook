@@ -261,95 +261,165 @@ struct BellHarmonyView: View {
     @State private var showFFT = false
 
     var body: some View {
-        VStack {
-            // Audio Visualization Section
-            VStack {
-                if conductor.engine.output != nil {
-                    if showFFT {
-                        FFTView(conductor.engine.output!)
-                            .frame(height: 100)
-                    } else {
-                        NodeOutputView(conductor.engine.output!)
-                            .frame(height: 100)
-                    }
+        ScrollView {
+            VStack(spacing: 24) {
+                // Audio Visualization Section
+                VStack(spacing: 12) {
+                    Text("Audio Visualization")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
                     
-                    // Toggle between waveform and FFT
-                    Button(action: {
-                        showFFT.toggle()
-                    }) {
-                        Text(showFFT ? "Show Waveform" : "Show Spectrum")
-                            .foregroundColor(.blue)
+                    if conductor.engine.output != nil {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.05))
+                            
+                            VStack(spacing: 8) {
+                                if showFFT {
+                                    FFTView(conductor.engine.output!)
+                                        .frame(height: 120)
+                                } else {
+                                    NodeOutputView(conductor.engine.output!)
+                                        .frame(height: 120)
+                                }
+                                
+                                Button(action: { showFFT.toggle() }) {
+                                    HStack {
+                                        Image(systemName: showFFT ? "waveform" : "chart.bar")
+                                        Text(showFFT ? "Show Waveform" : "Show Spectrum")
+                                    }
+                                    .foregroundColor(.blue)
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 16)
+                                    .background(
+                                        Capsule()
+                                            .stroke(Color.blue, lineWidth: 1)
+                                    )
+                                }
+                            }
+                            .padding()
+                        }
                     }
-                    .padding(.bottom, 10)
                 }
-            }
-            
-            // Instrument Selection
-            HStack {
-                Button(action: {
-                    conductor.currentInstrument = .tubularBells
-                }) {
-                    Text("Tubular Bells")
-                        .foregroundColor(conductor.currentInstrument == .tubularBells ? .green : .blue)
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 8)
-                            .stroke(conductor.currentInstrument == .tubularBells ? Color.green : Color.blue))
-                }
+                .padding(.horizontal)
                 
-                Button(action: {
-                    conductor.currentInstrument = .rhodesPiano
-                }) {
-                    Text("Rhodes Piano")
-                        .foregroundColor(conductor.currentInstrument == .rhodesPiano ? .green : .blue)
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 8)
-                            .stroke(conductor.currentInstrument == .rhodesPiano ? Color.green : Color.blue))
-                }
-                
-                Button(action: {
-                    conductor.currentInstrument = .clarinet
-                }) {
-                    Text("Clarinet")
-                        .foregroundColor(conductor.currentInstrument == .clarinet ? .green : .blue)
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 8)
-                            .stroke(conductor.currentInstrument == .clarinet ? Color.green : Color.blue))
-                }
-            }
-            .padding()
-            
-            // Filter Controls
-            VStack(spacing: 20) {
-                HStack {
-                    Text("Cutoff")
-                    Slider(value: $conductor.cutoffFrequency, in: 20...20_000) {
-                        Text("Cutoff Frequency")
+                // Instrument Selection
+                VStack(spacing: 12) {
+                    Text("Instrument")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 12) {
+                        ForEach([
+                            (title: "Tubular Bells", type: BellHarmonyConductor.InstrumentType.tubularBells),
+                            (title: "Rhodes Piano", type: BellHarmonyConductor.InstrumentType.rhodesPiano),
+                            (title: "Clarinet", type: BellHarmonyConductor.InstrumentType.clarinet)
+                        ], id: \.title) { instrument in
+                            Button(action: { conductor.currentInstrument = instrument.type }) {
+                                VStack {
+                                    Image(systemName: instrument.type == .tubularBells ? "bell" :
+                                            instrument.type == .rhodesPiano ? "pianokeys" : "music.note")
+                                        .font(.system(size: 24))
+                                    Text(instrument.title)
+                                        .font(.subheadline)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(conductor.currentInstrument == instrument.type ?
+                                             Color.blue.opacity(0.1) : Color.clear)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(conductor.currentInstrument == instrument.type ?
+                                               Color.blue : Color.gray.opacity(0.3))
+                                )
+                                .foregroundColor(conductor.currentInstrument == instrument.type ?
+                                               .blue : .primary)
+                            }
+                        }
                     }
-                    Text(String(format: "%.0f Hz", conductor.cutoffFrequency))
                 }
+                .padding(.horizontal)
                 
-                HStack {
-                    Text("Resonance")
-                    Slider(value: $conductor.resonance, in: 0...0.75) {
-                        Text("Resonance")
+                // Filter Controls
+                VStack(spacing: 12) {
+                    Text("Filter")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    VStack(spacing: 20) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "waveform.path")
+                                Text("Cutoff")
+                                Spacer()
+                                Text(String(format: "%.0f Hz", conductor.cutoffFrequency))
+                                    .foregroundColor(.secondary)
+                                    .monospacedDigit()
+                            }
+                            
+                            Slider(value: $conductor.cutoffFrequency, in: 20...20_000) {
+                                Text("Cutoff Frequency")
+                            }
+                            .accentColor(.blue)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "dial.high")
+                                Text("Resonance")
+                                Spacer()
+                                Text(String(format: "%.2f", conductor.resonance))
+                                    .foregroundColor(.secondary)
+                                    .monospacedDigit()
+                            }
+                            
+                            Slider(value: $conductor.resonance, in: 0...0.75) {
+                                Text("Resonance")
+                            }
+                            .accentColor(.blue)
+                        }
                     }
-                    Text(String(format: "%.2f", conductor.resonance))
-                }
-            }
-            .padding()
-            
-            Button(action: {
-                conductor.playBellChord1()
-            }) {
-                Text("Bell Chord 1")
-                    .foregroundColor(.blue)
                     .padding()
-                    .background(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.secondary.opacity(0.05))
+                    )
+                }
+                .padding(.horizontal)
+                
+                // Bell Chord Button
+                Button(action: { conductor.playBellChord1() }) {
+                    HStack {
+                        Image(systemName: "music.note.list")
+                        Text("Play Bell Chord")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 24)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue)
+                    )
+                }
+                .padding(.vertical)
+                
+                // Keyboard
+                VStack(spacing: 12) {
+                    Text("Keyboard")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    MIDIKitKeyboard(noteOn: conductor.noteOn,
+                                  noteOff: conductor.noteOff)
+                        .frame(height: 120)
+                }
+                .padding(.horizontal)
             }
-            .padding()
-            
-            MIDIKitKeyboard(noteOn: conductor.noteOn,
-                           noteOff: conductor.noteOff)
+            .padding(.vertical)
         }
         .cookbookNavBarTitle("Bell Harmony")
         .onAppear {
@@ -359,6 +429,6 @@ struct BellHarmonyView: View {
             conductor.stop()
         }
         .background(colorScheme == .dark ?
-                   Color.clear : Color(red: 0.9, green: 0.9, blue: 0.9))
+                   Color.black : Color(red: 0.97, green: 0.97, blue: 0.97))
     }
 }

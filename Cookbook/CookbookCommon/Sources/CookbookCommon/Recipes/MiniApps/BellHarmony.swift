@@ -117,7 +117,8 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         }
     }
     
-    func playBellChord1() {
+    // Bell chord functions
+    func playBellChord(_ index: Int) {
         // Clear any currently playing notes
         for i in 0..<notes.count {
             if notes[i] != 0 {
@@ -134,30 +135,70 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
             }
         }
         
-        // Play the chord notes
-        let chordNotes = [63, 72, 79, 85, 90, 95] // D#3, C4, G4, C#5, F#5, B5
-        for (index, note) in chordNotes.enumerated() {
+        let chords: [(String, [Int])] = [
+            ("0c", [63, 72, 79, 85, 90, 95]),  // D#3, C4, G4, C#5, F#5, B5
+            ("1c", [63, 72, 79, 85, 90, 94]),  // D#3, C4, G4, C#5, F#5, A#5
+            ("2c", [63, 72, 79, 85, 89, 93]),  // D#3, C4, G4, C#5, F5, A5
+            ("3c", [63, 72, 79, 84, 88, 92]),  // D#3, C4, G4, C5, E5, G#5
+            ("4c", [63, 72, 79, 85, 89, 94]),  // D#3, C4, G4, C#5, F5, A#5
+            ("5c", [63, 72, 79, 85, 88, 93]),  // D#3, C4, G4, C#5, E5, A5
+            ("6c", [63, 72, 79, 84, 87, 92]),  // D#3, C4, G4, C5, D#5, G#5
+            ("0C", [64, 72, 79, 85, 90, 95]),  // E3, C4, G4, C#5, F#5, B5
+            ("1C", [64, 72, 79, 85, 90, 94]),  // E3, C4, G4, C#5, F#5, A#5
+            ("2C", [64, 72, 79, 85, 89, 93]),  // E3, C4, G4, C#5, F5, A5
+            ("3C", [64, 72, 79, 84, 88, 92]),  // E3, C4, G4, C5, E5, G#5
+            ("0Sc", [68, 73, 78, 84, 91, 100]), // G#3, C#4, F#4, C5, G5, E6
+            ("1Sc", [69, 73, 78, 84, 91, 100]), // A3, C#4, F#4, C5, G5, E6
+            ("2Sc", [70, 74, 78, 84, 91, 100]), // A#3, D4, F#4, C5, G5, E6
+            ("3Sc", [71, 75, 79, 84, 91, 100])  // B3, D#4, G4, C5, G5, E6
+        ]
+        
+        guard index >= 0 && index < chords.count else { return }
+        let chord = chords[index]
+        
+        // Play each note in the chord using a different oscillator
+        for (i, note) in chord.1.enumerated() {
             switch currentInstrument {
             case .tubularBells:
-                osc[index].trigger(note: MIDINoteNumber(note), velocity: 100)
-                env[index].openGate()
+                osc[i].trigger(note: MIDINoteNumber(note), velocity: 100)
+                env[i].openGate()
             case .rhodesPiano:
-                osc2[index].trigger(note: MIDINoteNumber(note), velocity: 100)
-                env2[index].openGate()
+                osc2[i].trigger(note: MIDINoteNumber(note), velocity: 100)
+                env2[i].openGate()
             case .clarinet:
-                osc3[index].trigger(note: MIDINoteNumber(note), velocity: 100)
-                env3[index].attackDuration = 0.02
-                env3[index].releaseDuration = 0.1
-                env3[index].openGate()
+                osc3[i].trigger(note: MIDINoteNumber(note), velocity: 100)
+                env3[i].attackDuration = 0.02
+                env3[i].releaseDuration = 0.1
+                env3[i].openGate()
                 
                 // Schedule note off after a fixed duration for the chord
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    self?.osc3[index].trigger(note: 0, velocity: 0)
-                    self?.env3[index].closeGate()
-                    self?.notes[index] = 0
+                    self?.osc3[i].trigger(note: 0, velocity: 0)
+                    self?.env3[i].closeGate()
+                    self?.notes[i] = 0
                 }
             }
-            notes[index] = note
+            notes[i] = note
+        }
+    }
+    
+    func playBellChord1() {
+        playBellChord(0)
+    }
+    
+    func playNote(pitch: Pitch, velocity: Int = 127) {
+        switch currentInstrument {
+        case .tubularBells:
+            osc[0].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+            env[0].openGate()
+        case .rhodesPiano:
+            osc2[0].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+            env2[0].openGate()
+        case .clarinet:
+            osc3[0].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+            env3[0].attackDuration = 0.02
+            env3[0].releaseDuration = 0.1
+            env3[0].openGate()
         }
     }
     
@@ -258,177 +299,138 @@ extension NSNotification.Name {
 struct BellHarmonyView: View {
     @StateObject var conductor = BellHarmonyConductor()
     @Environment(\.colorScheme) var colorScheme
-    @State private var showFFT = false
+    @State private var showFFT = true
+
+    let chordLabels = ["0c", "1c", "2c", "3c", "4c", "5c", "6c", 
+                       "0C", "1C", "2C", "3C",
+                       "0Sc", "1Sc", "2Sc", "3Sc"]
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Audio Visualization Section
-                VStack(spacing: 12) {
-                    Text("Audio Visualization")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
+        VStack(spacing: 12) {
+            // Audio Visualization Section
+            if conductor.engine.output != nil {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.black.opacity(0.05))
                     
-                    if conductor.engine.output != nil {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.black.opacity(0.05))
-                            
-                            VStack(spacing: 8) {
-                                if showFFT {
-                                    FFTView(conductor.engine.output!)
-                                        .frame(height: 120)
-                                } else {
-                                    NodeOutputView(conductor.engine.output!)
-                                        .frame(height: 120)
-                                }
-                                
-                                Button(action: { showFFT.toggle() }) {
-                                    HStack {
-                                        Image(systemName: showFFT ? "waveform" : "chart.bar")
-                                        Text(showFFT ? "Show Waveform" : "Show Spectrum")
-                                    }
-                                    .foregroundColor(.blue)
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 16)
-                                    .background(
-                                        Capsule()
-                                            .stroke(Color.blue, lineWidth: 1)
-                                    )
-                                }
-                            }
-                            .padding()
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Instrument Selection
-                VStack(spacing: 12) {
-                    Text("Instrument")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
-                    HStack(spacing: 12) {
-                        ForEach([
-                            (title: "Tubular Bells", type: BellHarmonyConductor.InstrumentType.tubularBells),
-                            (title: "Rhodes Piano", type: BellHarmonyConductor.InstrumentType.rhodesPiano),
-                            (title: "Clarinet", type: BellHarmonyConductor.InstrumentType.clarinet)
-                        ], id: \.title) { instrument in
-                            Button(action: { conductor.currentInstrument = instrument.type }) {
-                                VStack {
-                                    Image(systemName: instrument.type == .tubularBells ? "bell" :
-                                            instrument.type == .rhodesPiano ? "pianokeys" : "music.note")
-                                        .font(.system(size: 24))
-                                    Text(instrument.title)
-                                        .font(.subheadline)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(conductor.currentInstrument == instrument.type ?
-                                             Color.blue.opacity(0.1) : Color.clear)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(conductor.currentInstrument == instrument.type ?
-                                               Color.blue : Color.gray.opacity(0.3))
-                                )
-                                .foregroundColor(conductor.currentInstrument == instrument.type ?
-                                               .blue : .primary)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Filter Controls
-                VStack(spacing: 12) {
-                    Text("Filter")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "waveform.path")
-                                Text("Cutoff")
-                                Spacer()
-                                Text(String(format: "%.0f Hz", conductor.cutoffFrequency))
-                                    .foregroundColor(.secondary)
-                                    .monospacedDigit()
-                            }
-                            
-                            Slider(value: $conductor.cutoffFrequency, in: 20...20_000) {
-                                Text("Cutoff Frequency")
-                            }
-                            .accentColor(.blue)
+                    VStack(spacing: 4) {
+                        if showFFT {
+                            FFTView(conductor.engine.output!)
+                                .frame(height: 80)
+                        } else {
+                            NodeOutputView(conductor.engine.output!)
+                                .frame(height: 80)
                         }
                         
-                        VStack(alignment: .leading, spacing: 8) {
+                        Button(action: { showFFT.toggle() }) {
                             HStack {
-                                Image(systemName: "dial.high")
-                                Text("Resonance")
-                                Spacer()
-                                Text(String(format: "%.2f", conductor.resonance))
-                                    .foregroundColor(.secondary)
-                                    .monospacedDigit()
+                                Image(systemName: showFFT ? "waveform" : "chart.bar")
+                                Text(showFFT ? "Show Spectrum" : "Show Waveform")
                             }
-                            
-                            Slider(value: $conductor.resonance, in: 0...0.75) {
-                                Text("Resonance")
-                            }
-                            .accentColor(.blue)
+                            .font(.footnote)
+                            .foregroundColor(.blue)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(Capsule().stroke(Color.blue, lineWidth: 1))
                         }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.secondary.opacity(0.05))
-                    )
+                    .padding(8)
                 }
-                .padding(.horizontal)
-                
-                // Bell Chord Button
-                Button(action: { conductor.playBellChord1() }) {
-                    HStack {
-                        Image(systemName: "music.note.list")
-                        Text("Play Bell Chord")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 24)
-                    .background(
-                        Capsule()
-                            .fill(Color.blue)
-                    )
-                }
-                .padding(.vertical)
-                
-                // Keyboard
-                VStack(spacing: 12) {
-                    Text("Keyboard")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
-                    MIDIKitKeyboard(noteOn: conductor.noteOn,
-                                  noteOff: conductor.noteOff)
-                        .frame(height: 120)
-                }
-                .padding(.horizontal)
             }
-            .padding(.vertical)
+            
+            // Instrument Selection
+            HStack(spacing: 8) {
+                ForEach([
+                    (title: "Tubular Bells", type: BellHarmonyConductor.InstrumentType.tubularBells),
+                    (title: "Rhodes Piano", type: BellHarmonyConductor.InstrumentType.rhodesPiano),
+                    (title: "Clarinet", type: BellHarmonyConductor.InstrumentType.clarinet)
+                ], id: \.title) { instrument in
+                    Button(action: { conductor.currentInstrument = instrument.type }) {
+                        VStack(spacing: 2) {
+                            Image(systemName: instrument.type == .tubularBells ? "bell" :
+                                    instrument.type == .rhodesPiano ? "pianokeys" : "music.note")
+                                .font(.system(size: 16))
+                            Text(instrument.title)
+                                .font(.caption)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(conductor.currentInstrument == instrument.type ?
+                                     Color.blue.opacity(0.1) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(conductor.currentInstrument == instrument.type ?
+                                       Color.blue : Color.gray.opacity(0.3))
+                        )
+                        .foregroundColor(conductor.currentInstrument == instrument.type ?
+                                       .blue : .primary)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            
+            // Filter Controls
+            VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "waveform.path")
+                        Text("Cutoff")
+                            .font(.subheadline)
+                        Spacer()
+                        Text(String(format: "%.0f Hz", conductor.cutoffFrequency))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $conductor.cutoffFrequency, in: 20...20_000)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "dial.high")
+                        Text("Resonance")
+                            .font(.subheadline)
+                        Spacer()
+                        Text(String(format: "%.2f", conductor.resonance))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $conductor.resonance, in: 0...0.75)
+                }
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.05)))
+            .padding(.horizontal)
+            
+            // Bell Chord Buttons
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 4) {
+                ForEach(0..<chordLabels.count, id: \.self) { index in
+                    Button(action: { conductor.playBellChord(index) }) {
+                        Text(chordLabels[index])
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.blue))
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            
+            // Keyboard
+            MIDIKitKeyboard(noteOn: conductor.noteOn,
+                           noteOff: conductor.noteOff)
+                .frame(height: 120)
+                .padding(.horizontal, 8)
         }
+        .padding(.vertical, 8)
         .cookbookNavBarTitle("Bell Harmony")
-        .onAppear {
-            conductor.start()
-        }
-        .onDisappear {
-            conductor.stop()
-        }
-        .background(colorScheme == .dark ?
-                   Color.black : Color(red: 0.97, green: 0.97, blue: 0.97))
+        .onAppear { conductor.start() }
+        .onDisappear { conductor.stop() }
+        .background(colorScheme == .dark ? Color.black : Color(red: 0.97, green: 0.97, blue: 0.97))
     }
 }

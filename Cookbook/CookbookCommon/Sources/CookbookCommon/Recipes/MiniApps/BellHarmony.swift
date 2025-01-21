@@ -19,6 +19,21 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     var osc = [TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(),
                 TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells()]
     
+    @Published var useTubularBells: Bool = true {
+        didSet {
+            // Stop all currently playing notes when switching instruments
+            for i in 0..<notes.count {
+                if notes[i] != 0 {
+                    if useTubularBells {
+                        env2[i].closeGate() // Close previous instrument's gates
+                    } else {
+                        env[i].closeGate()
+                    }
+                    notes[i] = 0
+                }
+            }
+        }
+    }
     
     // MIDI Manager (MIDI methods are in SoundFont+MIDI)
     let midiManager = MIDIManager(
@@ -28,6 +43,7 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     )
     
     var env: Array<AmplitudeEnvelope>
+    var env2: Array<AmplitudeEnvelope>
     
     var numPlaying = 0
     func noteOn(pitch: Pitch, velocity: Int = 127) {
@@ -35,9 +51,14 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         if numPlaying > 10 {
             numPlaying = 0
         }
-        osc[numPlaying].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+        if useTubularBells {
+            osc[numPlaying].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+            env[numPlaying].openGate()
+        } else {
+            osc2[numPlaying].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+            env2[numPlaying].openGate()
+        }
         notes[numPlaying] = pitch.intValue
-        env[numPlaying].openGate()
     }
     
     func noteOn(pitch: Pitch, point _: CGPoint) {
@@ -48,32 +69,52 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     func noteOff(pitch: Pitch) {
         for num in 0 ... 10 {
             if notes[num] == pitch.intValue {
+                if useTubularBells {
                     env[num].closeGate()
-                    notes[num] = 0
+                } else {
+                    env2[num].closeGate()
+                }
+                notes[num] = 0
             }
         }
     }
     
     func playBellChord1() {
         // Clear any currently playing notes
-        for i in 0..<env.count {
-            env[i].closeGate()
-            notes[i] = 0
+        for i in 0..<notes.count {
+            if notes[i] != 0 {
+                if useTubularBells {
+                    env[i].closeGate()
+                } else {
+                    env2[i].closeGate()
+                }
+                notes[i] = 0
+            }
         }
         
         // Play the chord notes
         let chordNotes = [63, 72, 79, 85, 90, 95] // D#3, C4, G4, C#5, F#5, B5
         for (index, note) in chordNotes.enumerated() {
-            osc[index].trigger(note: MIDINoteNumber(note), velocity: 100)
+            if useTubularBells {
+                osc[index].trigger(note: MIDINoteNumber(note), velocity: 100)
+                env[index].openGate()
+            } else {
+                osc2[index].trigger(note: MIDINoteNumber(note), velocity: 100)
+                env2[index].openGate()
+            }
             notes[index] = note
-            env[index].openGate()
         }
     }
     
     init() {
         env = [AmplitudeEnvelope(osc[0]),AmplitudeEnvelope(osc[1]),AmplitudeEnvelope(osc[2]),AmplitudeEnvelope(osc[3]),AmplitudeEnvelope(osc[4]),AmplitudeEnvelope(osc[5]),AmplitudeEnvelope(osc[6]),AmplitudeEnvelope(osc[7]),AmplitudeEnvelope(osc[8]),AmplitudeEnvelope(osc[9]),AmplitudeEnvelope(osc[10])]
-
+        env2 = [AmplitudeEnvelope(osc2[0]),AmplitudeEnvelope(osc2[1]),AmplitudeEnvelope(osc2[2]),AmplitudeEnvelope(osc2[3]),AmplitudeEnvelope(osc2[4]),AmplitudeEnvelope(osc2[5]),AmplitudeEnvelope(osc2[6]),AmplitudeEnvelope(osc2[7]),AmplitudeEnvelope(osc2[8]),AmplitudeEnvelope(osc2[9]),AmplitudeEnvelope(osc2[10])]
         for envelope in env {
+            envelope.attackDuration = 0
+            envelope.releaseDuration = 0.2
+            mixer.addInput(envelope)
+        }
+        for envelope in env2 {
             envelope.attackDuration = 0
             envelope.releaseDuration = 0.2
             mixer.addInput(envelope)
@@ -83,7 +124,7 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
 
         // Set up MIDI
         MIDIConnect()
-    }
+    } 
     
     // Connect MIDI on init
     func MIDIConnect() {
@@ -152,6 +193,29 @@ struct BellHarmonyView: View {
             if conductor.engine.output != nil {
                 NodeOutputView(conductor.engine.output!)
             }
+            
+            HStack {
+                Button(action: {
+                    conductor.useTubularBells = true
+                }) {
+                    Text("Tubular Bells")
+                        .foregroundColor(conductor.useTubularBells ? .green : .blue)
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .stroke(conductor.useTubularBells ? Color.green : Color.blue))
+                }
+                
+                Button(action: {
+                    conductor.useTubularBells = false
+                }) {
+                    Text("Rhodes Piano")
+                        .foregroundColor(!conductor.useTubularBells ? .green : .blue)
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .stroke(!conductor.useTubularBells ? Color.green : Color.blue))
+                }
+            }
+            .padding()
             
             Button(action: {
                 conductor.playBellChord1()

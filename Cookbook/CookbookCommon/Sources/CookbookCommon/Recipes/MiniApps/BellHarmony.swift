@@ -17,7 +17,9 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     var osc2 = [RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(),
                RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey(), RhodesPianoKey()]
     var osc = [TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(),
-                TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells()]
+                TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells(), TubularBells()]         
+    var osc3 = [Clarinet(), Clarinet(), Clarinet(), Clarinet(), Clarinet(),
+                Clarinet(), Clarinet(), Clarinet(), Clarinet(), Clarinet(), Clarinet()]   
     
     // Filter setup
     var filter: MoogLadder!
@@ -34,15 +36,25 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         }
     }
     
-    @Published var useTubularBells: Bool = true {
+    enum InstrumentType {
+        case tubularBells
+        case rhodesPiano
+        case clarinet
+    }
+    
+    @Published var currentInstrument: InstrumentType = .tubularBells {
         didSet {
             // Stop all currently playing notes when switching instruments
             for i in 0..<notes.count {
                 if notes[i] != 0 {
-                    if useTubularBells {
-                        env2[i].closeGate()
-                    } else {
+                    switch oldValue {
+                    case .tubularBells:
                         env[i].closeGate()
+                    case .rhodesPiano:
+                        env2[i].closeGate()
+                    case .clarinet:
+                        osc3[i].trigger(note: 0, velocity: 0)
+                        env3[i].closeGate()
                     }
                     notes[i] = 0
                 }
@@ -59,6 +71,7 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     
     var env: Array<AmplitudeEnvelope>
     var env2: Array<AmplitudeEnvelope>
+    var env3: Array<AmplitudeEnvelope>
     
     var numPlaying = 0
     func noteOn(pitch: Pitch, velocity: Int = 127) {
@@ -66,28 +79,38 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         if numPlaying > 10 {
             numPlaying = 0
         }
-        if useTubularBells {
+        
+        switch currentInstrument {
+        case .tubularBells:
             osc[numPlaying].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
             env[numPlaying].openGate()
-        } else {
+        case .rhodesPiano:
             osc2[numPlaying].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
             env2[numPlaying].openGate()
+        case .clarinet:
+            osc3[numPlaying].trigger(note: MIDINoteNumber(pitch.intValue), velocity: MIDIVelocity(velocity))
+            env3[numPlaying].attackDuration = 0.02
+            env3[numPlaying].releaseDuration = 0.1
+            env3[numPlaying].openGate()
         }
         notes[numPlaying] = pitch.intValue
     }
     
     func noteOn(pitch: Pitch, point _: CGPoint) {
         noteOn(pitch: pitch, velocity: 120)
-        
     }
     
     func noteOff(pitch: Pitch) {
         for num in 0 ... 10 {
             if notes[num] == pitch.intValue {
-                if useTubularBells {
+                switch currentInstrument {
+                case .tubularBells:
                     env[num].closeGate()
-                } else {
+                case .rhodesPiano:
                     env2[num].closeGate()
+                case .clarinet:
+                    osc3[num].trigger(note: 0, velocity: 0)
+                    env3[num].closeGate()
                 }
                 notes[num] = 0
             }
@@ -98,10 +121,14 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         // Clear any currently playing notes
         for i in 0..<notes.count {
             if notes[i] != 0 {
-                if useTubularBells {
+                switch currentInstrument {
+                case .tubularBells:
                     env[i].closeGate()
-                } else {
+                case .rhodesPiano:
                     env2[i].closeGate()
+                case .clarinet:
+                    osc3[i].trigger(note: 0, velocity: 0)
+                    env3[i].closeGate()
                 }
                 notes[i] = 0
             }
@@ -110,12 +137,25 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         // Play the chord notes
         let chordNotes = [63, 72, 79, 85, 90, 95] // D#3, C4, G4, C#5, F#5, B5
         for (index, note) in chordNotes.enumerated() {
-            if useTubularBells {
+            switch currentInstrument {
+            case .tubularBells:
                 osc[index].trigger(note: MIDINoteNumber(note), velocity: 100)
                 env[index].openGate()
-            } else {
+            case .rhodesPiano:
                 osc2[index].trigger(note: MIDINoteNumber(note), velocity: 100)
                 env2[index].openGate()
+            case .clarinet:
+                osc3[index].trigger(note: MIDINoteNumber(note), velocity: 100)
+                env3[index].attackDuration = 0.02
+                env3[index].releaseDuration = 0.1
+                env3[index].openGate()
+                
+                // Schedule note off after a fixed duration for the chord
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.osc3[index].trigger(note: 0, velocity: 0)
+                    self?.env3[index].closeGate()
+                    self?.notes[index] = 0
+                }
             }
             notes[index] = note
         }
@@ -124,8 +164,9 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
     init() {
         env = [AmplitudeEnvelope(osc[0]),AmplitudeEnvelope(osc[1]),AmplitudeEnvelope(osc[2]),AmplitudeEnvelope(osc[3]),AmplitudeEnvelope(osc[4]),AmplitudeEnvelope(osc[5]),AmplitudeEnvelope(osc[6]),AmplitudeEnvelope(osc[7]),AmplitudeEnvelope(osc[8]),AmplitudeEnvelope(osc[9]),AmplitudeEnvelope(osc[10])]
         env2 = [AmplitudeEnvelope(osc2[0]),AmplitudeEnvelope(osc2[1]),AmplitudeEnvelope(osc2[2]),AmplitudeEnvelope(osc2[3]),AmplitudeEnvelope(osc2[4]),AmplitudeEnvelope(osc2[5]),AmplitudeEnvelope(osc2[6]),AmplitudeEnvelope(osc2[7]),AmplitudeEnvelope(osc2[8]),AmplitudeEnvelope(osc2[9]),AmplitudeEnvelope(osc2[10])]
-        
-        // Configure envelopes for both instruments
+        env3 = [AmplitudeEnvelope(osc3[0]),AmplitudeEnvelope(osc3[1]),AmplitudeEnvelope(osc3[2]),AmplitudeEnvelope(osc3[3]),AmplitudeEnvelope(osc3[4]),AmplitudeEnvelope(osc3[5]),AmplitudeEnvelope(osc3[6]),AmplitudeEnvelope(osc3[7]),AmplitudeEnvelope(osc3[8]),AmplitudeEnvelope(osc3[9]),AmplitudeEnvelope(osc3[10])]
+
+        // Configure envelopes for all instruments
         for envelope in env {
             envelope.attackDuration = 0
             envelope.releaseDuration = 0.2
@@ -135,6 +176,13 @@ class BellHarmonyConductor: ObservableObject, HasAudioEngine {
         for envelope in env2 {
             envelope.attackDuration = 0
             envelope.releaseDuration = 0.2
+            mixer.addInput(envelope)
+        }
+        
+        // Configure Clarinet envelopes with shorter attack/release times
+        for envelope in env3 {
+            envelope.attackDuration = 0.02  // Short attack for responsiveness
+            envelope.releaseDuration = 0.1  // Quick release to avoid lingering
             mixer.addInput(envelope)
         }
         
@@ -236,30 +284,41 @@ struct BellHarmonyView: View {
                 }
             }
             
+            // Instrument Selection
             HStack {
                 Button(action: {
-                    conductor.useTubularBells = true
+                    conductor.currentInstrument = .tubularBells
                 }) {
                     Text("Tubular Bells")
-                        .foregroundColor(conductor.useTubularBells ? .green : .blue)
+                        .foregroundColor(conductor.currentInstrument == .tubularBells ? .green : .blue)
                         .padding()
                         .background(RoundedRectangle(cornerRadius: 8)
-                            .stroke(conductor.useTubularBells ? Color.green : Color.blue))
+                            .stroke(conductor.currentInstrument == .tubularBells ? Color.green : Color.blue))
                 }
                 
                 Button(action: {
-                    conductor.useTubularBells = false
+                    conductor.currentInstrument = .rhodesPiano
                 }) {
                     Text("Rhodes Piano")
-                        .foregroundColor(!conductor.useTubularBells ? .green : .blue)
+                        .foregroundColor(conductor.currentInstrument == .rhodesPiano ? .green : .blue)
                         .padding()
                         .background(RoundedRectangle(cornerRadius: 8)
-                            .stroke(!conductor.useTubularBells ? Color.green : Color.blue))
+                            .stroke(conductor.currentInstrument == .rhodesPiano ? Color.green : Color.blue))
+                }
+                
+                Button(action: {
+                    conductor.currentInstrument = .clarinet
+                }) {
+                    Text("Clarinet")
+                        .foregroundColor(conductor.currentInstrument == .clarinet ? .green : .blue)
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .stroke(conductor.currentInstrument == .clarinet ? Color.green : Color.blue))
                 }
             }
             .padding()
             
-            // Filter Controls with visualization feedback
+            // Filter Controls
             VStack(spacing: 20) {
                 HStack {
                     Text("Cutoff")
